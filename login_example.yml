@@ -1,0 +1,13 @@
+bot_token:
+
+telethon_settings:
+  # https://docs.telethon.dev/en/latest/modules/client.html#telethon.client.telegrambaseclient.TelegramBaseClient
+  session:
+  auto_reconnect:
+  retry_delay:
+  connection_retries:
+  request_retries:
+  api_id:
+  api_hash:
+
+log_level: DEBUG
