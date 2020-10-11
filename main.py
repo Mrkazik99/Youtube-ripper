@@ -7,6 +7,7 @@ import youtube_dl
 from moviepy.editor import *
 from telethon import TelegramClient, events
 from telethon.tl.types import InputWebDocument
+from telethon.tl.custom import InlineBuilder
 
 with open("login.yml", 'r') as f:
     config = yaml.safe_load(f)
