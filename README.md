@@ -1,7 +1,7 @@
 # Youtube-ripper
 Some telegram bot that downloads YouTube video and convert to MP3 with inline search
 
-Simply use: @[name_of_bot] [some title]
+Simply use: @[name_of_bot] [some_title]
 then wait for results and tap one you are looking for.
 
 SS:

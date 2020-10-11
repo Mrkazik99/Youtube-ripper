@@ -1,6 +1,5 @@
 import logging
 import yaml
-import os
 import googleapiclient.discovery
 import re
 import json
@@ -63,7 +62,8 @@ async def inline_query(event):
             thumb = json.dumps(thumb['high'])
             thumb = json.loads(thumb)
             ans.append(builder.article(snippet['title'], description=snippet['channelTitle'],
-                                       thumb=InputWebDocument(url=thumb['url'], size=0, mime_type="image/jpeg", attributes=[], ),
+                                       thumb=InputWebDocument(url=thumb['url'], size=0, mime_type="image/jpeg",
+                                                              attributes=[], ),
                                        text='https://www.youtube.com/watch?v=' + id['videoId']))
         await event.answer(ans)
 
@@ -72,7 +72,7 @@ async def inline_query(event):
 async def answer(event):
     if event.text.startswith("@"):
         await event.respond('It\'s me 😂')
-    if re.match('https:\/\/www.youtube.com\/watch\?v=(.{11})', event.text):
+    if re.match('https://www.youtube.com/watch\?v=(.{11})', event.text):
         ydl_opts = {
             'format': 'best[ext=mp4]',
             'keepvideo': True
@@ -80,15 +80,15 @@ async def answer(event):
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info("{}".format(event.text))
             title = ydl.prepare_filename(info)
-            mp4_file = r''+title
-            mp3_file = r''+title+'.mp3'
+            mp4_file = r'' + title
+            mp3_file = r'' + title + '.mp3'
             videoclip = VideoFileClip(mp4_file)
             audioclip = videoclip.audio
             audioclip.write_audiofile(mp3_file)
             videoclip.close()
             os.remove(title)
         await event.reply(file=mp3_file)
-        os.remove(title+'.mp3')
+        os.remove(title + '.mp3')
 
 
 with client:
