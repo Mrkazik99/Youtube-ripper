@@ -1,13 +1,23 @@
 import logging
 import yaml
-import aiohttp
+import os
+import googleapiclient.discovery
 import re
+import json
 import youtube_dl
 from moviepy.editor import *
 from telethon import TelegramClient, events
+from telethon.tl.types import InputWebDocument
 
 with open("login.yml", 'r') as f:
     config = yaml.safe_load(f)
+
+api_service_name = "youtube"
+api_version = "v3"
+DEVELOPER_KEY = config['youtube_apikey']
+
+youtube = googleapiclient.discovery.build(
+    api_service_name, api_version, developerKey=DEVELOPER_KEY)
 
 logging.basicConfig(format='[%(levelname) 5s/%(asctime)s] %(name)s: %(message)s',
                     level=logging.WARNING)
@@ -16,15 +26,17 @@ client = TelegramClient(**config['telethon_settings']).start(bot_token=config['b
 
 
 async def youtube_search(search_query):
-    async with aiohttp.ClientSession() as session:
-        print('Getting videos')
-        async with await session.get('https://www.youtube.com/results?search_query=' + search_query) as resp:
-            # search_results = [[], []]
-            print(resp.status)
-            # print(await resp.text())
-            urls = re.findall('\/watch\?v=(.{11})', await resp.text())
-            search_results = list(dict.fromkeys(urls))
-            return search_results
+    request = youtube.search().list(
+        part="snippet",
+        maxResults=10,
+        q=search_query
+    )
+    response = request.execute()
+    result = json.dumps(response)
+    result = json.loads(result)
+    result = json.dumps(result["items"])
+    result = json.loads(result)
+    return result
 
 
 def error():
@@ -39,10 +51,20 @@ async def inline_query(event):
         await event.answer([ans])
         return
     else:
-        urls = await youtube_search(event.text)
+        results = await youtube_search(event.text)
         ans = []
-        for entry in urls:
-            ans.append(builder.article(entry, text='https://www.youtube.com/watch?v=' + entry))
+        for entry in results:
+            id = json.dumps(entry['id'])
+            id = json.loads(id)
+            snippet = json.dumps(entry['snippet'])
+            snippet = json.loads(snippet)
+            thumb = json.dumps(snippet['thumbnails'])
+            thumb = json.loads(thumb)
+            thumb = json.dumps(thumb['high'])
+            thumb = json.loads(thumb)
+            ans.append(builder.article(snippet['title'], description=snippet['channelTitle'],
+                                       thumb=InputWebDocument(url=thumb['url'], size=0, mime_type="image/jpeg", attributes=[], ),
+                                       text='https://www.youtube.com/watch?v=' + id['videoId']))
         await event.answer(ans)
 
 
@@ -56,7 +78,6 @@ async def answer(event):
             'keepvideo': True
         }
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-            print('Downloading music')
             info = ydl.extract_info("{}".format(event.text))
             title = ydl.prepare_filename(info)
             mp4_file = r''+title
