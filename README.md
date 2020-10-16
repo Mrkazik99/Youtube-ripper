@@ -12,8 +12,8 @@ SS:
 
 TODO:
 
--download files to ram
+- download files to ram
 
--use own download script
+- create own downloading script
 
--add some meta tags to mp3 file
+- ~~add some meta tags to mp3 file~~ //done

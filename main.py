@@ -2,12 +2,16 @@ import logging
 import yaml
 import googleapiclient.discovery
 import re
+import requests
 import json
 import youtube_dl
 from moviepy.editor import *
+from mutagen.easyid3 import EasyID3
+from mutagen.flac import Picture
+from mutagen.id3 import ID3, APIC
+from mutagen import id3
 from telethon import TelegramClient, events
 from telethon.tl.types import InputWebDocument
-from telethon.tl.custom import InlineBuilder
 
 with open("login.yml", 'r') as f:
     config = yaml.safe_load(f)
@@ -39,10 +43,6 @@ async def youtube_search(search_query):
     return result
 
 
-def error():
-    return "Error while searching videos"
-
-
 @client.on(events.InlineQuery)
 async def inline_query(event):
     builder = event.builder
@@ -54,18 +54,18 @@ async def inline_query(event):
         results = await youtube_search(event.text)
         ans = []
         for entry in results:
-            id = json.dumps(entry['id'])
-            id = json.loads(id)
+            ids = json.dumps(entry['id'])
+            ids = json.loads(ids)
             snippet = json.dumps(entry['snippet'])
             snippet = json.loads(snippet)
             thumb = json.dumps(snippet['thumbnails'])
             thumb = json.loads(thumb)
             thumb = json.dumps(thumb['high'])
             thumb = json.loads(thumb)
-            ans.append(builder.article(snippet['title'], description=snippet['channelTitle'],
-                                       thumb=InputWebDocument(url=thumb['url'], size=0, mime_type="image/jpeg",
-                                                              attributes=[], ),
-                                       text='https://www.youtube.com/watch?v=' + id['videoId']))
+            ans.append(await builder.article(snippet['title'], description=snippet['channelTitle'],
+                                             thumb=InputWebDocument(url=thumb['url'], size=0, mime_type="image/jpeg",
+                                                                    attributes=[], ),
+                                             text='https://www.youtube.com/watch?v=' + ids['videoId']))
         await event.answer(ans)
 
 
@@ -86,6 +86,44 @@ async def answer(event):
             videoclip = VideoFileClip(mp4_file)
             audioclip = videoclip.audio
             audioclip.write_audiofile(mp3_file)
+            request = youtube.search().list(
+                part="snippet",
+                maxResults=1,
+                q=info['id']
+            )
+            response = request.execute()
+            result = json.dumps(response)
+            result = json.loads(result)
+            result = json.dumps(result["items"])
+            result = json.loads(result)
+            for entry in result:
+                snippet = json.dumps(entry['snippet'])
+                snippet = json.loads(snippet)
+                thumb = json.dumps(snippet['thumbnails'])
+                thumb = json.loads(thumb)
+                thumb = json.dumps(thumb['high'])
+                thumb = json.loads(thumb)
+            audio = EasyID3(title + '.mp3')
+            audio['title'] = snippet['title']
+            audio['artist'] = snippet['channelTitle']
+            audio.save()
+            audio = ID3(title + '.mp3')
+            pic = Picture()
+            pic.type = id3.PictureType.COVER_FRONT
+            pic.width = 640
+            pic.height = 640
+            pic.mime = 'image/jpeg'
+            r = requests.get(thumb['url'], stream=True)
+            r.raw.decode_content = True
+            pic.data = r.raw.read()
+
+            audio['APIC'] = APIC(
+                  encoding=3,
+                  mime='image/jpeg',
+                  type=3, desc=u'Cover',
+                  data=pic.data
+            )
+            audio.save()
             videoclip.close()
             os.remove(title)
         await event.reply(file=mp3_file)
