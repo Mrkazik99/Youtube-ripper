@@ -30,6 +30,8 @@ client = TelegramClient(**config['telethon_settings']).start(bot_token=config['b
 
 
 async def youtube_search(search_query):
+    if search_query == '' or search_query == ' ':
+        return
     request = youtube.search().list(
         part="snippet",
         maxResults=10,
@@ -56,24 +58,28 @@ async def inline_query(event):
         for entry in results:
             ids = json.dumps(entry['id'])
             ids = json.loads(ids)
-            snippet = json.dumps(entry['snippet'])
-            snippet = json.loads(snippet)
-            thumb = json.dumps(snippet['thumbnails'])
-            thumb = json.loads(thumb)
-            thumb = json.dumps(thumb['high'])
-            thumb = json.loads(thumb)
-            ans.append(await builder.article(snippet['title'], description=snippet['channelTitle'],
-                                             thumb=InputWebDocument(url=thumb['url'], size=0, mime_type="image/jpeg",
-                                                                    attributes=[], ),
-                                             text='https://www.youtube.com/watch?v=' + ids['videoId']))
+            if ids['kind'] != 'youtube#channel':
+                snippet = json.dumps(entry['snippet'])
+                snippet = json.loads(snippet)
+                thumb = json.dumps(snippet['thumbnails'])
+                thumb = json.loads(thumb)
+                thumb = json.dumps(thumb['high'])
+                thumb = json.loads(thumb)
+                ans.append(await builder.article(snippet['title'], description=snippet['channelTitle'],
+                                                 thumb=InputWebDocument(url=thumb['url'], size=0, mime_type="image/jpeg",
+                                                                        attributes=[], ),
+                                                 text='https://www.youtube.com/watch?v=' + ids['videoId']))
         await event.answer(ans)
 
 
 @client.on(events.NewMessage)
 async def answer(event):
-    if event.text.startswith("@"):
+    if event.text == '/start':
+        await event.reply('Siema mały kurwiu ;)')
+    if event.text.startswith('@'):
         await event.respond('It\'s me 😂')
     if re.match('https://www.youtube.com/watch\?v=(.{11})', event.text):
+        messId = await event.reply("Downloading mp4")
         ydl_opts = {
             'format': 'best[ext=mp4]',
             'keepvideo': True
@@ -81,6 +87,7 @@ async def answer(event):
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info("{}".format(event.text))
             title = ydl.prepare_filename(info)
+            await client.edit_message(messId, 'Converting to mp3')
             mp4_file = r'' + title
             mp3_file = r'' + title + '.mp3'
             videoclip = VideoFileClip(mp4_file)
@@ -104,7 +111,7 @@ async def answer(event):
                 thumb = json.dumps(thumb['high'])
                 thumb = json.loads(thumb)
             audio = EasyID3(title + '.mp3')
-            audio['title'] = snippet['title']
+            audio['title'] = '!' + snippet['title']
             audio['artist'] = snippet['channelTitle']
             audio.save()
             audio = ID3(title + '.mp3')
@@ -118,15 +125,17 @@ async def answer(event):
             pic.data = r.raw.read()
 
             audio['APIC'] = APIC(
-                  encoding=3,
-                  mime='image/jpeg',
-                  type=3, desc=u'Cover',
-                  data=pic.data
+                encoding=3,
+                mime='image/jpeg',
+                type=3, desc=u'Cover',
+                data=pic.data
             )
             audio.save()
             videoclip.close()
             os.remove(title)
-        await event.reply(file=mp3_file)
+            await client.edit_message(messId, 'Uploading...')
+            await event.reply(file=mp3_file)
+            await client.edit_message(messId, 'Here is your mp3 ⬇️')
         os.remove(title + '.mp3')
 
 
