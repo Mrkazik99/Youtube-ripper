@@ -15,6 +15,7 @@ from mutagen import id3
 import ffmpeg
 from mutagen.mp3 import MP3
 from pytube import YouTube
+from pytube import Playlist
 from telethon import TelegramClient, events
 from telethon.tl.types import InputWebDocument
 
@@ -33,13 +34,13 @@ session = aiohttp.ClientSession()
 f.close()
 
 
-async def youtube_search(type, search_query):
+async def youtube_search(type, search_query, amount):
     search_query = search_query.strip()
     if not search_query:
         return
     async with session.get('https://www.googleapis.com/youtube/v3/search', params={'part': 'snippet',
                                                                                    'q': search_query,
-                                                                                   'maxResult': 10,
+                                                                                   'maxResult': amount,
                                                                                    'type': type,
                                                                                    'key': api_key}) as response:
         resp = await response.json()
@@ -50,16 +51,39 @@ async def youtube_search(type, search_query):
 async def inline_query(event):
     builder = event.builder
     if not event.text or len(event.text) < 3:
-        ans = builder.article('Wrong command', text='Usage: @YTmusicRipperBot <music/video> <YT url/YT video name>')
+        ans = builder.article('Wrong command', text='Usage: @YTmusicRipperBot <.p/.v> <video or playlist query>')
         await event.answer([ans])
         return
     else:
         if event.text.startswith('.p'):
-            results = await youtube_search(type='playlist', search_query=event.text[2:])
+            results = await youtube_search(type='playlist', search_query=event.text[2:], amount=10)
+            await event.answer([event.builder.article(title=item['snippet']['title'],
+                                                      description=f"Published by: {item['snippet']['channelTitle']}",
+                                                      thumb=InputWebDocument(
+                                                          url=item['snippet']['thumbnails']['default']['url'],
+                                                          size=0,
+                                                          mime_type='image/jpg',
+                                                          attributes=[]),
+                                                      text=f"https://www.youtube.com/playlist?list={item['id']['playlistId']}")
+                                for item in results])
         elif event.text.startswith('.v'):
-            results = await youtube_search(type='video', search_query=event.text[2:])
+            results = await youtube_search(type='video', search_query=event.text[2:], amount=10)
+            await event.answer([event.builder.article(title=item['snippet']['title'],
+                                                      description=f"Published by: {item['snippet']['channelTitle']}",
+                                                      thumb=InputWebDocument(
+                                                          url=item['snippet']['thumbnails']['default']['url'],
+                                                          size=0, mime_type='image/jpeg', attributes=[]),
+                                                      text=f"https://www.youtube.com/watch?v={item['id']['videoId']}")
+                                for item in results])
         else:
-            results = await youtube_search(type='video', search_query=event.text)
+            results = await youtube_search(type='video', search_query=event.text, amount=10)
+            await event.answer([event.builder.article(title=item['snippet']['title'],
+                                                      description=f"Published by: {item['snippet']['channelTitle']}",
+                                                      thumb=InputWebDocument(
+                                                          url=item['snippet']['thumbnails']['default']['url'],
+                                                          size=0, mime_type='image/jpeg', attributes=[]),
+                                                      text=f"https://www.youtube.com/watch?v={item['id']['videoId']}")
+                                for item in results])
 
     # ans = []
     # if not results:
@@ -83,38 +107,30 @@ async def answer(event):
         await event.reply('Siema mały kurwiu ;)')
     if event.text.startswith('@'):
         await event.respond("It's me 😂")
-    # if re.match('https://www.youtube.com/watch\?v=(.{11})', event.text):
-    if 'https://www.youtube.com/watch?v=' in event.text or 'https://youtu.be/' in event.text:
-        messId = await event.reply("Downloading mp4")
-
-        yt = YouTube(event.text)
-        print('Downloading')
-        stream = yt.streams.get_audio_only()
-        video = io.BytesIO()
-        stream.stream_to_buffer(buffer=video)
-        print('Converting')
-        file = io.BytesIO(video.getvalue())
-        file.name = 'music.mp4'
-        # out, err = (
-        #     ffmpeg
-        #     .input('pipe:')
-        #     .output('-', format='f32le', acodec='pcm_f32le', ac=1, ar='44100')
-        #     .run(pipe_stdin=True, capture_stdout=True, capture_stderr=True)
-        # )
-        # out.communicate(input=file)
-        process = (
-            ffmpeg
-                .input('pipe:')
-                .output('pipe:')
-                .overwrite_output()
-                .run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True)
-        )
-        out, err = process.communicate(input=file)
-        # print(out)
-        # mp3 = io.BytesIO()
-        # mp3.name = 'music.mp3'
-        print('Uploading')
-        await client.send_file(event.sender.id, file=file)
+    if 'https://www.youtube.com/' in event.text or 'https://youtu.be/' in event.text:
+        if 'playlist?list=' not in event.text:
+            messId = await event.reply("Downloading mp4")
+            video = io.BytesIO()
+            yt = YouTube(event.text)
+            print('Downloading')
+            stream = yt.streams.first()
+            stream.stream_to_buffer(buffer=video)
+            print('Converting')
+            file = io.BytesIO(video.getvalue())
+            file.name = f'{yt.title}.mp4'
+            print('Uploading')
+            await client.send_file(event.sender.id, file=file)
+        else:
+            playlist = Playlist(event.text)
+            for vid in playlist.videos:
+                messId = await event.reply("Downloading mp4")
+                video = io.BytesIO()
+                print('Downloading')
+                vid.streams.first().stream_to_buffer(buffer=video)
+                file = io.BytesIO(video.getvalue())
+                file.name = f'{vid.title}.mp4'
+                print('Uploading')
+                await client.send_file(event.sender.id, file=file)
 
     # ydl_opts = {
     #     'format': 'best[ext=mp4]',
