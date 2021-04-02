@@ -2,18 +2,18 @@ import logging
 import yaml
 import io
 import aiohttp as aiohttp
-import urllib
-import re
-import requests
-import json
-import youtube_dl
-from moviepy.editor import *
-from mutagen.easyid3 import EasyID3
-from mutagen.flac import Picture
-from mutagen.id3 import ID3, APIC
-from mutagen import id3
-import ffmpeg
-from mutagen.mp3 import MP3
+# import urllib
+# import re
+# import requests
+# import json
+# import youtube_dl
+# from moviepy.editor import *
+# from mutagen.easyid3 import EasyID3
+# from mutagen.flac import Picture
+# from mutagen.id3 import ID3, APIC
+# from mutagen import id3
+# import ffmpeg
+# from mutagen.mp3 import MP3
 from pytube import YouTube, Playlist, exceptions
 from telethon import TelegramClient, events
 from telethon.tl.types import InputWebDocument
