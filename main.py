@@ -14,8 +14,7 @@ from mutagen.id3 import ID3, APIC
 from mutagen import id3
 import ffmpeg
 from mutagen.mp3 import MP3
-from pytube import YouTube
-from pytube import Playlist
+from pytube import YouTube, Playlist, exceptions
 from telethon import TelegramClient, events
 from telethon.tl.types import InputWebDocument
 
@@ -25,7 +24,8 @@ with open('login.yml', 'r') as f:
 api_key = config['youtube_apikey']
 
 logging.basicConfig(format='[%(levelname) 5s/%(asctime)s] %(name)s: %(message)s',
-                    level=logging.WARNING)
+                    level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 client = TelegramClient(**config['telethon_settings']).start(bot_token=config['bot_token'])
 
@@ -47,7 +47,25 @@ async def youtube_search(type, search_query, amount):
         return resp['items']
 
 
-@client.on(events.InlineQuery)
+async def yt_download(event: events.newmessage.NewMessage.Event, yt: YouTube) -> None:
+    video = io.BytesIO()
+    type_ = None
+    for stream in yt.streams:
+        if stream.audio_codec == 'opus':
+            type_ = stream.mime_type.replace('audio/', '')
+            break
+        else:
+            pass
+    mess_id = await event.reply(f'__Downloading {yt.title}__')
+    yt.streams.get_audio_only(subtype=type_).stream_to_buffer(buffer=video)
+    file = io.BytesIO(video.getvalue())
+    file.name = f'{yt.title}.{type_}'
+    await client.edit_message(mess_id, f'__Uploading {yt.title}__')
+    await event.reply(file=file)
+    await client.delete_messages(event.sender_id, mess_id)
+
+
+@client.on(events.InlineQuery())
 async def inline_query(event):
     builder = event.builder
     if not event.text or len(event.text) < 3:
@@ -101,94 +119,51 @@ async def inline_query(event):
     # await event.answer(ans)
 
 
-@client.on(events.NewMessage)
+@client.on(events.NewMessage())
 async def answer(event):
     if event.text == '/start':
         await event.reply('Siema mały kurwiu ;)')
-    if event.text.startswith('@'):
+    elif event.text.startswith('@'):
         await event.respond("It's me 😂")
-    if 'https://www.youtube.com/' in event.text or 'https://youtu.be/' in event.text:
+    elif 'https://www.youtube.com/' in event.text or 'https://youtu.be/' in event.text:
         if 'playlist?list=' not in event.text:
-            messId = await event.reply("Downloading mp4")
-            video = io.BytesIO()
-            yt = YouTube(event.text)
-            print('Downloading')
-            stream = yt.streams.first()
-            stream.stream_to_buffer(buffer=video)
-            print('Converting')
-            file = io.BytesIO(video.getvalue())
-            file.name = f'{yt.title}.mp4'
-            print('Uploading')
-            await client.send_file(event.sender.id, file=file)
+            try:
+                yt = YouTube(event.text)
+                await yt_download(event, yt)
+                # video = io.BytesIO()
+                # print('Downloading')
+                # stream = yt.streams.first()
+                # type_ = None
+                # for stream in yt.streams:
+                #     if stream.audio_codec == 'opus':
+                #         type_ = stream.mime_type.replace('audio/', '')
+                #         break
+                #     else:
+                #         pass
+                # messId = await event.reply(f'__Downloading {yt.title}__')
+                # yt.streams.get_audio_only(subtype=type_).stream_to_buffer(buffer=video)
+                # file = io.BytesIO(video.getvalue())
+                # file.name = f'{yt.title}.{type_}'
+                # await client.edit_message(messId, f'__Uploading {yt.title}__')
+                # await event.reply(file=file)
+                # await client.delete_messages(event.sender_id, messId)
+            except exceptions.VideoUnavailable as e:
+                await event.reply('**Video is unavailable**')
         else:
-            playlist = Playlist(event.text)
-            for vid in playlist.videos:
-                messId = await event.reply("Downloading mp4")
-                video = io.BytesIO()
-                print('Downloading')
-                vid.streams.first().stream_to_buffer(buffer=video)
-                file = io.BytesIO(video.getvalue())
-                file.name = f'{vid.title}.mp4'
-                print('Uploading')
-                await client.send_file(event.sender.id, file=file)
-
-    # ydl_opts = {
-    #     'format': 'best[ext=mp4]',
-    #     'keepvideo': True
-    # }
-    # with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-    #     info = ydl.extract_info("{}".format(event.text))
-    #     title = ydl.prepare_filename(info)
-    #     await client.edit_message(messId, 'Converting to mp3')
-    #     mp4_file = r'' + title
-    #     mp3_file = r'' + title + '.mp3'
-    #     videoclip = VideoFileClip(mp4_file)
-    #     audioclip = videoclip.audio
-    #     audioclip.write_audiofile(mp3_file)
-    #     request = youtube.search().list(
-    #         part="snippet",
-    #         maxResults=1,
-    #         q=info['id']
-    #     )
-    #     response = request.execute()
-    #     result = json.dumps(response)
-    #     result = json.loads(result)
-    #     result = json.dumps(result["items"])
-    #     result = json.loads(result)
-    #     for entry in result:
-    #         snippet = json.dumps(entry['snippet'])
-    #         snippet = json.loads(snippet)
-    #         thumb = json.dumps(snippet['thumbnails'])
-    #         thumb = json.loads(thumb)
-    #         thumb = json.dumps(thumb['high'])
-    #         thumb = json.loads(thumb)
-    #     audio = EasyID3(title + '.mp3')
-    #     audio['title'] = '!' + snippet['title']
-    #     audio['artist'] = snippet['channelTitle']
-    #     audio.save()
-    #     audio = ID3(title + '.mp3')
-    #     pic = Picture()
-    #     pic.type = id3.PictureType.COVER_FRONT
-    #     pic.width = 640
-    #     pic.height = 640
-    #     pic.mime = 'image/jpeg'
-    #     r = requests.get(thumb['url'], stream=True)
-    #     r.raw.decode_content = True
-    #     pic.data = r.raw.read()
-    #
-    #     audio['APIC'] = APIC(
-    #         encoding=3,
-    #         mime='image/jpeg',
-    #         type=3, desc=u'Cover',
-    #         data=pic.data
-    #     )
-    #     audio.save()
-    #     videoclip.close()
-    #     os.remove(title)
-    #     await client.edit_message(messId, 'Uploading...')
-    #     await event.reply(file=mp3_file)
-    #     await client.edit_message(messId, 'Here is your mp3 ⬇️')
-    # os.remove(title + '.mp3')
+            try:
+                playlist = Playlist(event.text)
+                for vid in playlist.videos:
+                    await yt_download(event, vid)
+            except Exception as e:
+                print(e)
+                # messId = await event.reply("Downloading mp4")
+                # video = io.BytesIO()
+                # print('Downloading')
+                # vid.streams.get_audio_only().stream_to_buffer(buffer=video)
+                # file = io.BytesIO(video.getvalue())
+                # file.name = f'{vid.title}.mp4'
+                # print('Uploading')
+                # await client.send_file(event.sender.id, file=file)
 
 
 with client:
