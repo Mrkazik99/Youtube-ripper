@@ -1,9 +1,10 @@
 import io
 import logging
+
 import aiohttp
 import ffmpeg
 import yaml
-from mutagen import oggvorbis
+from mutagen import oggopus
 from pytube import YouTube, Playlist, exceptions
 from telethon import TelegramClient, events
 from telethon.tl.types import InputWebDocument
@@ -39,13 +40,11 @@ async def youtube_search(search_type, search_query, amount) -> list or None:
 
 async def generate_names(yt: YouTube):
     if yt.metadata.metadata and len(yt.metadata.metadata) == 1:
-        return {'Artist': yt.metadata.metadata[0]['Artist'], 'Title': yt.metadata.metadata[0]['Song']}
-        # return {'Artist': yt.metadata.metadata[0]['Artist'], 'Title': yt.metadata.metadata[0]['Song'],
-                # 'Album': yt.metadata.metadata[0]['Album']}
-    #TODO:Check if metadata contains Album
+        return {'Artist': yt.metadata.metadata[0]['Artist'] if 'Artist' in yt.metadata.metadata[0] else yt.author,
+                'Title': yt.metadata.metadata[0]['Song'] if 'Song' in yt.metadata.metadata[0] else yt.title,
+                'Album': yt.metadata.metadata[0]['Album'] if 'Album' in yt.metadata.metadata[0] else ''}
     else:
-        return {'Artist': yt.author, 'Title': yt.title}
-        # return {'Artist': yt.author, 'Title': yt.title, 'Album': ''}
+        return {'Artist': yt.author, 'Title': yt.title, 'Album': ''}
 
 
 async def yt_download(event: events.newmessage.NewMessage.Event, yt: YouTube) -> None:
@@ -63,25 +62,23 @@ async def yt_download(event: events.newmessage.NewMessage.Event, yt: YouTube) ->
     process = (
         ffmpeg
             .input('pipe:')
-            .output('pipe:', format='ogg')
+            .output('pipe:', format='opus')
             .run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True)
     )
     out, err = process.communicate(input=file.read())
     out_file = io.BytesIO(out)
-    mutagen_file = oggvorbis.OggVorbis(out_file)
+    mutagen_file = oggopus.OggOpus(out_file)
     metas = await generate_names(yt)
     mutagen_file['Artist'] = metas['Artist']
     mutagen_file['Title'] = metas['Title']
-    # mutagen_file['Album'] = metas['Album']
-    #TODO:Add some cover
+    mutagen_file['Album'] = metas['Album']
     mutagen_file.save(out_file)
     out_file = io.BytesIO(out_file.getvalue())
-    #TODO:Try to simplify BytesIO casting
     out_file.name = f"{metas['Artist']} - {metas['Title']}.ogg"
     await client.edit_message(mess_id, f'__Uploading {yt.title}__')
     async with client.action(event.sender_id, 'file'):
         await event.reply(file=out_file)
-    await client.delete_messages(event.sender_id, mess_id)
+        await client.delete_messages(event.sender_id, mess_id)
 
 
 async def build_answer(switch: str, event: events.InlineQuery.Event):
@@ -95,7 +92,8 @@ async def build_answer(switch: str, event: events.InlineQuery.Event):
                                   text=f"https://www.youtube.com/playlist?list={result['id']['playlistId']}"
                                   if switch == '.p' else f"https://www.youtube.com/watch?v={result['id']['videoId']}")
             for result in
-            await youtube_search(search_type='video' if switch == '.v' else 'playlist', search_query=event.text[2:],
+            await youtube_search(search_type='video' if switch == '.v' else 'playlist',
+                                 search_query=event.text[2:] if not switch else event.text,
                                  amount=10)]
 
 
@@ -126,6 +124,7 @@ async def answer(event):
                 yt = YouTube(event.text)
                 await yt_download(event, yt)
             except exceptions.VideoUnavailable as e:
+                logger.exception(msg=e)
                 await event.reply('**Video is unavailable**')
         else:
             try:
