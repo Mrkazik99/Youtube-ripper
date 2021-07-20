@@ -1,3 +1,4 @@
+import base64
 import io
 import logging
 
@@ -38,13 +39,21 @@ async def youtube_search(search_type, search_query, amount) -> list or None:
         return resp['items']
 
 
-async def generate_names(yt: YouTube):
+async def get_image(url: str):
+    async with session.get(url) as resp:
+        if resp.status == 200:
+            img = await resp.read()
+    return base64.b64encode(img)
+
+
+async def generate_names(yt: YouTube) -> dict:
     if yt.metadata.metadata and len(yt.metadata.metadata) == 1:
         return {'Artist': yt.metadata.metadata[0]['Artist'] if 'Artist' in yt.metadata.metadata[0] else yt.author,
                 'Title': yt.metadata.metadata[0]['Song'] if 'Song' in yt.metadata.metadata[0] else yt.title,
-                'Album': yt.metadata.metadata[0]['Album'] if 'Album' in yt.metadata.metadata[0] else ''}
+                'Album': yt.metadata.metadata[0]['Album'] if 'Album' in yt.metadata.metadata[0] else '',
+                'Thumb': yt.thumbnail_url}
     else:
-        return {'Artist': yt.author, 'Title': yt.title, 'Album': ''}
+        return {'Artist': yt.author, 'Title': yt.title, 'Album': '', 'Thumb': yt.thumbnail_url}
 
 
 async def yt_download(event: events.newmessage.NewMessage.Event, yt: YouTube) -> None:
@@ -59,21 +68,22 @@ async def yt_download(event: events.newmessage.NewMessage.Event, yt: YouTube) ->
     mess_id = await event.reply(f'__Downloading {yt.title}__')
     yt.streams.get_audio_only(subtype=type_).stream_to_buffer(buffer=video)
     file = io.BytesIO(video.getvalue())
-    process = (
-        ffmpeg
-            .input('pipe:')
-            .output('pipe:', format='opus')
-            .run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True)
-    )
-    out, err = process.communicate(input=file.read())
-    out_file = io.BytesIO(out)
-    mutagen_file = oggopus.OggOpus(out_file)
+    # process = (
+    #     ffmpeg
+    #         .input('pipe:')
+    #         .output('pipe:', format='opus')
+    #         .run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True)
+    # )
+    # out, err = process.communicate(input=file.read())
+    # out_file = io.BytesIO(out)
+    mutagen_file = oggopus.OggOpus(file)
     metas = await generate_names(yt)
     mutagen_file['Artist'] = metas['Artist']
     mutagen_file['Title'] = metas['Title']
     mutagen_file['Album'] = metas['Album']
-    mutagen_file.save(out_file)
-    out_file = io.BytesIO(out_file.getvalue())
+    mutagen_file['METADATA_BLOCK_PICTURE'] = get_image(metas['Thumb'])
+    mutagen_file.save(file)
+    out_file = io.BytesIO(file.getvalue())
     out_file.name = f"{metas['Artist']} - {metas['Title']}.ogg"
     await client.edit_message(mess_id, f'__Uploading {yt.title}__')
     async with client.action(event.sender_id, 'file'):
