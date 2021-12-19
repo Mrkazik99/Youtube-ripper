@@ -4,4 +4,4 @@ ffmpeg-python~=0.2.0
 mutagen~=1.45.1
 pytube
 PyYAML~=5.4.1
-Telethon~=1.21.1
+Telethon
