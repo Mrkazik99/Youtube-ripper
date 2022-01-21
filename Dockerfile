@@ -8,6 +8,6 @@ RUN apt-get update && \
 
 WORKDIR /app
 ADD requirements.txt .
-RUN pip install -r requirements.txt
+RUN python3.9 -m pip install --no-cache-dir --upgrade -r requirements.txt
 ADD . ./
 ENTRYPOINT [ "python", "main.py" ]
