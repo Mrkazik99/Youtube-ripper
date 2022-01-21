@@ -2,6 +2,6 @@ aiohttp~=3.7.4.post0
 cryptg~=0.2.post2
 ffmpeg-python~=0.2.0
 mutagen~=1.45.1
-pytube~=11.0.1
+pytube~=11.0.0
 PyYAML~=5.4.1
 Telethon
