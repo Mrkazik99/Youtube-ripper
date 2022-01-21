@@ -3,8 +3,7 @@ LABEL maintainer="David Sn <divad.nnamtdeis@gmail.com>"
 
 # Install required ffmpeg
 RUN apt-get update && \
-    apt-get install --no-install-recommends -y ffmpeg && \
-    apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    apt-get install --no-install-recommends -y ffmpeg
 
 WORKDIR /app
 ADD requirements.txt .
