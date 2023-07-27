@@ -5,3 +5,4 @@ mutagen~=1.45.1
 pytube==12.0.0
 PyYAML~=5.4.1
 Telethon
+shazamio
