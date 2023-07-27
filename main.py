@@ -8,6 +8,7 @@ from mutagen import oggopus
 from pytube import YouTube, Playlist, exceptions
 from telethon import TelegramClient, events
 from telethon.tl.types import InputWebDocument
+import shazamio
 
 with open('config.yml', 'r') as f:
     config = yaml.safe_load(f)
@@ -22,7 +23,19 @@ client = TelegramClient(**config['telethon_settings']).start(bot_token=config['b
 
 session = aiohttp.ClientSession()
 
+shazam = shazamio.Shazam()
+
 f.close()
+
+
+def find_album_name(data:list) -> str:
+    album = None
+    for section in data:
+        if 'metadata' in section.keys():
+            for metadata in section['metadata']:
+                if metadata['title'].lower() == 'album':
+                    album = metadata['text']
+    return album if album else 'No album'
 
 
 async def youtube_search(search_type, search_query, amount) -> list or None:
@@ -67,8 +80,16 @@ async def yt_download(event: events.newmessage.NewMessage.Event, yt: YouTube) ->
     )
     out, err = process.communicate(input=file.read())
     out_file = io.BytesIO(out)
+    track_data = await shazam.recognize_song(out)
+    if len(track_data['matches']) > 1:
+        metas = await generate_names(yt)
+    else:
+        metas = {
+            'Artist': track_data['track']['subtitle'],
+            'Title': track_data['track']['title'],
+            'Album': find_album_name(track_data['track']['sections'])
+        }
     mutagen_file = oggopus.OggOpus(out_file)
-    metas = await generate_names(yt)
     mutagen_file['Artist'] = metas['Artist']
     mutagen_file['Title'] = metas['Title']
     mutagen_file['Album'] = metas['Album']
