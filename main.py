@@ -11,31 +11,40 @@ from telethon import TelegramClient, events
 from telethon.tl.types import InputWebDocument
 import shazamio
 
-with open('config.yml', 'r') as f:
-    config = yaml.safe_load(f)
+try:
+    with open('config.yml', 'r') as f:
+        config = yaml.safe_load(f)
 
-api_key = config['youtube_apikey']
+    api_key = config['youtube_apikey']
 
-logging.basicConfig(format='[%(levelname) 5s/%(asctime)s] %(name)s: %(message)s',
-                    level=logging.WARNING)
-logger = logging.getLogger(__name__)
+    logging.basicConfig(format='[%(levelname) 5s/%(asctime)s] %(name)s: %(message)s',
+                        level=logging.WARNING)
+    logger = logging.getLogger(__name__)
 
-client = TelegramClient(**config['telethon_settings']).start(bot_token=config['bot_token'])
+    client = TelegramClient(**config['telethon_settings']).start(bot_token=config['bot_token'])
 
-session = aiohttp.ClientSession()
+    session = aiohttp.ClientSession()
 
-shazam = shazamio.Shazam()
+    shazam = shazamio.Shazam()
 
-f.close()
+except Exception as e:
+    print(f'Unexpected error ({e})')
+
+finally:
+    f.close()
 
 
-def find_album_name(data:list) -> str:
+def find_album_name(data: list) -> str:
     album = None
     for section in data:
-        if 'metadata' in section.keys():
-            for metadata in section['metadata']:
-                if metadata['title'].lower() == 'album':
-                    album = metadata['text']
+        if 'metadata' not in section.keys():
+            continue
+        for metadata in section['metadata']:
+            if not metadata['title'].lower() == 'album':
+                continue
+            album = metadata['text']
+            break
+        break
     return album if album else 'No album'
 
 
@@ -53,18 +62,33 @@ async def youtube_search(search_type, search_query, amount) -> list or None:
                                                                                    'maxResult': amount,
                                                                                    'type': search_type,
                                                                                    'key': api_key}) as response:
-        resp = await response.json()
-        return resp['items']
+        return (await response.json())['items']
 
 
-async def generate_names(yt: YouTube):
-    if yt.metadata.metadata and len(yt.metadata.metadata) == 1:
-        return {'Artist': yt.metadata.metadata[0]['Artist'] if 'Artist' in yt.metadata.metadata[0] else yt.author,
+async def generate_metas(yt: YouTube, out: bytes) -> dict:
+    track_data = await shazam.recognize_song(out)
+    if len(track_data['matches']) > 1 or 'track' not in track_data.keys() or 'title' not in track_data[
+        'track'].keys() or 'subtitle' not in track_data['track'].keys():
+        if yt.metadata.metadata and len(yt.metadata.metadata) == 1:
+            return {
+                'Artist': yt.metadata.metadata[0]['Artist'] if 'Artist' in yt.metadata.metadata[0] else yt.author,
                 'Title': yt.metadata.metadata[0]['Song'] if 'Song' in yt.metadata.metadata[0] else yt.title,
                 'Album': yt.metadata.metadata[0]['Album'] if 'Album' in yt.metadata.metadata[0] else '',
-                'picture': await download_and_prepare_picture(yt.thumbnail_url)}
+                'picture': await download_and_prepare_picture(yt.thumbnail_url)
+            }
+        else:
+            return {
+                'Artist': yt.author,
+                'Title': yt.title, 'Album': '',
+                'picture': await download_and_prepare_picture(yt.thumbnail_url)
+            }
     else:
-        return {'Artist': yt.author, 'Title': yt.title, 'Album': '', 'picture': await download_and_prepare_picture(yt.thumbnail_url)}
+        return {
+            'Artist': track_data['track']['subtitle'],
+            'Title': track_data['track']['title'],
+            'Album': find_album_name(track_data['track']['sections']),
+            'picture': await download_and_prepare_picture(track_data['track']['images']['coverart'])
+        }
 
 
 async def yt_download(event: events.newmessage.NewMessage.Event, yt: YouTube) -> None:
@@ -81,22 +105,13 @@ async def yt_download(event: events.newmessage.NewMessage.Event, yt: YouTube) ->
     file = io.BytesIO(video.getvalue())
     process = (
         ffmpeg
-            .input('pipe:')
-            .output('pipe:', format='opus')
-            .run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True)
+        .input('pipe:')
+        .output('pipe:', format='opus')
+        .run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True)
     )
     out, err = process.communicate(input=file.read())
     out_file = io.BytesIO(out)
-    track_data = await shazam.recognize_song(out)
-    if len(track_data['matches']) > 1 or 'track' not in track_data.keys() or 'title' not in track_data['track'].keys() or 'subtitle' not in track_data['track'].keys():
-        metas = await generate_names(yt)
-    else:
-        metas = {
-            'Artist': track_data['track']['subtitle'],
-            'Title': track_data['track']['title'],
-            'Album': find_album_name(track_data['track']['sections']),
-            'picture': await download_and_prepare_picture(track_data['track']['images']['coverart'])
-        }
+    metas = await generate_metas(yt, out)
     track_file = MediaFile(out_file)
     cover = Image(data=metas['picture'], desc=u'album cover', type=ImageType.front)
     track_file.images = [cover]
