@@ -158,14 +158,20 @@ async def answer(event):
             except exceptions.VideoUnavailable as e:
                 logger.exception(msg=e)
                 await event.reply('**Video is unavailable**')
+            except Exception as e:
+                logger.exception(msg=e)
+                await event.reply('Unexpected issue, please contact admin [Mrkazik99](tg://user?id=1154962566)')
         else:
             try:
                 playlist = Playlist(event.text)
                 for vid in playlist.videos:
                     await yt_download(event, vid)
+            except exceptions.VideoUnavailable as e:
+                logger.exception(msg=e)
+                await event.reply('**Video is unavailable**')
             except Exception as e:
-                await event.reply('**Playlist or video is unavailable**')
-                print(e)
+                logger.exception(msg=e)
+                await event.reply('Unexpected issue, please contact admin [Mrkazik99](tg://user?id=1154962566)')
 
 
 with client:
