@@ -4,7 +4,8 @@ import logging
 import aiohttp
 import ffmpeg
 import yaml
-from mutagen import oggopus
+import base64
+from mediafile import MediaFile, Image, ImageType
 from pytube import YouTube, Playlist, exceptions
 from telethon import TelegramClient, events
 from telethon.tl.types import InputWebDocument
@@ -38,6 +39,11 @@ def find_album_name(data:list) -> str:
     return album if album else 'No album'
 
 
+async def download_and_prepare_picture(url: str) -> bytes:
+    async with session.get(url) as resp:
+        return await resp.content.read()
+
+
 async def youtube_search(search_type, search_query, amount) -> list or None:
     search_query = search_query.strip()
     if not search_query:
@@ -55,9 +61,10 @@ async def generate_names(yt: YouTube):
     if yt.metadata.metadata and len(yt.metadata.metadata) == 1:
         return {'Artist': yt.metadata.metadata[0]['Artist'] if 'Artist' in yt.metadata.metadata[0] else yt.author,
                 'Title': yt.metadata.metadata[0]['Song'] if 'Song' in yt.metadata.metadata[0] else yt.title,
-                'Album': yt.metadata.metadata[0]['Album'] if 'Album' in yt.metadata.metadata[0] else ''}
+                'Album': yt.metadata.metadata[0]['Album'] if 'Album' in yt.metadata.metadata[0] else '',
+                'picture': await download_and_prepare_picture(yt.thumbnail_url)}
     else:
-        return {'Artist': yt.author, 'Title': yt.title, 'Album': ''}
+        return {'Artist': yt.author, 'Title': yt.title, 'Album': '', 'picture': await download_and_prepare_picture(yt.thumbnail_url)}
 
 
 async def yt_download(event: events.newmessage.NewMessage.Event, yt: YouTube) -> None:
@@ -81,19 +88,23 @@ async def yt_download(event: events.newmessage.NewMessage.Event, yt: YouTube) ->
     out, err = process.communicate(input=file.read())
     out_file = io.BytesIO(out)
     track_data = await shazam.recognize_song(out)
-    if len(track_data['matches']) > 1:
+    if len(track_data['matches']) > 1 or 'track' not in track_data.keys() or 'title' not in track_data['track'].keys() or 'subtitle' not in track_data['track'].keys():
         metas = await generate_names(yt)
     else:
         metas = {
             'Artist': track_data['track']['subtitle'],
             'Title': track_data['track']['title'],
-            'Album': find_album_name(track_data['track']['sections'])
+            'Album': find_album_name(track_data['track']['sections']),
+            'picture': await download_and_prepare_picture(track_data['track']['images']['coverart'])
         }
-    mutagen_file = oggopus.OggOpus(out_file)
-    mutagen_file['Artist'] = metas['Artist']
-    mutagen_file['Title'] = metas['Title']
-    mutagen_file['Album'] = metas['Album']
-    mutagen_file.save(out_file)
+    track_file = MediaFile(out_file)
+    cover = Image(data=metas['picture'], desc=u'album cover', type=ImageType.front)
+    track_file.images = [cover]
+    track_file.title = metas['Title']
+    track_file.album = metas['Album']
+    track_file.artist = metas['Artist']
+    track_file.albumartist = metas['Artist']
+    track_file.save()
     out_file = io.BytesIO(out_file.getvalue())
     out_file.name = f"{metas['Artist']} - {metas['Title']}.ogg"
     await client.edit_message(mess_id, f'__Uploading {yt.title}__')
