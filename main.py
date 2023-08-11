@@ -83,12 +83,20 @@ async def generate_metas(yt: YouTube, out: bytes) -> dict:
                 'picture': await download_and_prepare_picture(yt.thumbnail_url)
             }
     else:
-        return {
-            'Artist': track_data['track']['subtitle'],
-            'Title': track_data['track']['title'],
-            'Album': find_album_name(track_data['track']['sections']),
-            'picture': await download_and_prepare_picture(track_data['track']['images']['coverart'])
-        }
+        if 'images' in track_data['track']:
+            return {
+                'Artist': track_data['track']['subtitle'],
+                'Title': track_data['track']['title'],
+                'Album': find_album_name(track_data['track']['sections']),
+                'picture': await download_and_prepare_picture(track_data['track']['images']['coverart'])
+            }
+        else:
+            return {
+                'Artist': track_data['track']['subtitle'],
+                'Title': track_data['track']['title'],
+                'Album': find_album_name(track_data['track']['sections']),
+                'picture': await download_and_prepare_picture(yt.thumbnail_url)
+            }
 
 
 async def yt_download(event: events.newmessage.NewMessage.Event, yt: YouTube) -> None:
