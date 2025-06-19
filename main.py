@@ -6,7 +6,7 @@ import ffmpeg
 import yaml
 import base64
 from mediafile import MediaFile, Image, ImageType
-from pytube import YouTube, Playlist, exceptions
+from pytubefix import YouTube, Playlist, exceptions
 from telethon import TelegramClient, events
 from telethon.tl.types import InputWebDocument
 import shazamio

@@ -2,7 +2,7 @@ aiohttp
 cryptg
 ffmpeg-python
 mediafile
-pytube
+pytubefix
 PyYAML
 Telethon
 shazamio
