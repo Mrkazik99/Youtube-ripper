@@ -1,3 +1,4 @@
+import asyncio
 import io
 import logging
 
@@ -23,11 +24,9 @@ try:
 
     client = TelegramClient(**config['telethon_settings']).start(bot_token=config['bot_token'])
 
-    session = aiohttp.ClientSession()
-
     shazam = shazamio.Shazam()
 
-    output_format = config['output_format'] if config['output_format'] else 'opus'
+    output_format = config['output_format'] if 'output_format' in config else 'opus'
 
 except Exception as e:
     print(f'Unexpected error ({e})')
@@ -51,25 +50,28 @@ def find_album_name(data: list) -> str:
 
 
 async def download_and_prepare_picture(url: str) -> bytes:
-    async with session.get(url) as resp:
-        return await resp.content.read()
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            return await resp.content.read()
 
 
 async def youtube_search(search_type, search_query, amount) -> list or None:
     search_query = search_query.strip()
     if not search_query:
         return
-    async with session.get('https://www.googleapis.com/youtube/v3/search', params={'part': 'snippet',
-                                                                                   'q': search_query,
-                                                                                   'maxResult': amount,
-                                                                                   'type': search_type,
-                                                                                   'key': api_key}) as response:
-        return (await response.json())['items']
+    async with aiohttp.ClientSession() as session:
+        async with session.get('https://www.googleapis.com/youtube/v3/search',
+                                               params={'part': 'snippet',
+                                                       'q': search_query,
+                                                       'maxResult': amount,
+                                                       'type': search_type,
+                                                       'key': api_key}) as response:
+            return (await response.json())['items']
 
 
 async def generate_metas(yt: YouTube, out: bytes) -> dict:
-    track_data = await shazam.recognize_song(out)
-    if len(track_data['matches']) > 1 or 'track' not in track_data.keys() or 'title' not in track_data[
+    track_data = await shazam.recognize(out, options=shazamio.SearchParams(segment_duration_seconds=10))
+    if len(track_data['matches']) < 3 or 'track' not in track_data.keys() or 'title' not in track_data[
         'track'].keys() or 'subtitle' not in track_data['track'].keys():
         if yt.metadata.metadata and len(yt.metadata.metadata) == 1:
             return {
@@ -105,7 +107,7 @@ async def yt_download(event: events.newmessage.NewMessage.Event, yt: YouTube) ->
     video = io.BytesIO()
     type_ = None
     for stream in yt.streams:
-        if stream.audio_codec == 'opus':
+        if stream.audio_codec == output_format:
             type_ = stream.mime_type.replace('audio/', '')
             break
         else:
