@@ -27,6 +27,8 @@ try:
 
     shazam = shazamio.Shazam()
 
+    output_format = config['output_format'] if config['output_format'] else 'opus'
+
 except Exception as e:
     print(f'Unexpected error ({e})')
 
@@ -114,7 +116,7 @@ async def yt_download(event: events.newmessage.NewMessage.Event, yt: YouTube) ->
     process = (
         ffmpeg
         .input('pipe:')
-        .output('pipe:', format='opus')
+        .output('pipe:', format=output_format)
         .run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True)
     )
     out, err = process.communicate(input=file.read())
@@ -129,7 +131,7 @@ async def yt_download(event: events.newmessage.NewMessage.Event, yt: YouTube) ->
     track_file.albumartist = metas['Artist']
     track_file.save()
     out_file = io.BytesIO(out_file.getvalue())
-    out_file.name = f"{metas['Artist']} - {metas['Title']}.ogg"
+    out_file.name = f"{metas['Artist']} - {metas['Title']}.{output_format}"
     await client.edit_message(mess_id, f'__Uploading {yt.title}__')
     async with client.action(event.sender_id, 'file'):
         await event.reply(file=out_file)

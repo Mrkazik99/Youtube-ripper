@@ -1,8 +1,8 @@
-aiohttp~=3.7.4.post0
-cryptg~=0.2.post2
-ffmpeg-python~=0.2.0
+aiohttp
+cryptg
+ffmpeg-python
 mediafile
 pytube
-PyYAML~=5.4.1
+PyYAML
 Telethon
 shazamio

@@ -1,5 +1,6 @@
 bot_token:
 youtube_apikey:
+output_format: #mp3/opus
 telethon_settings:
   # https://docs.telethon.dev/en/latest/modules/client.html#telethon.client.telegrambaseclient.TelegramBaseClient
   session:
